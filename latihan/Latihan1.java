@@ -1,4 +1,6 @@
-public class Test1 {
+package latihan;
+
+public class Latihan1 {
     public static void showMyProfile() {
         String nama = "Gede Ardi Pratama";
         String alamat = "Jakarta Selatan";
