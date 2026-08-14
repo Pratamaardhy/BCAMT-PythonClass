@@ -97,15 +97,46 @@ Atau langsung:
 .venv/bin/python -m pytest -v
 ```
 
-Cakupan test:
-- `tests/unit/test_auth_service.py` — register, login, hash, token
-- `tests/unit/test_auth_endpoints.py` — endpoint register/login + proteksi JWT via TestClient
+Cakupan test: belum ada test file — semua test dibuat lewat **Soal Latihan** di bawah (fixture `db_session` + `client` sudah siap di `tests/conftest.py`). Catatan: sebelum ada test file, `pytest` akan bilang `no tests ran` dengan exit code 5 — itu normal, bukan error.
 
 ## Soal Latihan
 
+Ada 2 latihan: **unit test auth** dan **API CRUD bank_account + test-nya**. Kerjakan berurutan.
+
+### Latihan 1: Unit test untuk Auth (register + login + JWT)
+
+Fitur auth sudah jadi di `app/services/auth_service.py` dan `app/controllers/auth_controller.py`. Tugasmu: tulis unit test-nya dari nol, pakai fixture yang sudah ada.
+
+Buat 2 file test baru:
+
+**`tests/unit/test_auth_service.py`** — service layer (`AuthService` + `UserRepository` + `db_session`):
+- `register` sukses → user tersimpan, `id` terisi, `hashed_password` ≠ password plain, `is_active` true
+- `register` dengan email huruf besar → tersimpan lowercase
+- `register` email duplikat → `ConflictError`
+- `authenticate` kredensial benar → user kembali
+- `authenticate` password salah → `InvalidCredentialsError`
+- `authenticate` email tidak dikenal → `InvalidCredentialsError`
+- `issue_token` lalu `get_user_from_token` → token valid, `id` cocok
+- `get_user_from_token` dengan token invalid → error (401)
+
+**`tests/unit/test_auth_endpoints.py`** — endpoint layer via `client` (TestClient):
+- `POST /api/v1/auth/register` → `201`, response berisi email benar, `hashed_password` **tidak bocor**
+- register email duplikat → `409`
+- register password pendek (`< 8` char) → `422`
+- `POST /api/v1/auth/login` → `200`, body punya `access_token` + `token_type: "bearer"`
+- login password salah → `401`
+- `GET /api/v1/bank-accounts` tanpa token → `401` (proteksi JWT)
+
+Kriteria penerimaan:
+- [ ] `make test` → semua test auth pass.
+- [ ] Test service tidak butuh HTTP (langsung instansiasi service).
+- [ ] Test memakai fixture `db_session` / `client`, bukan koneksi PostgreSQL.
+
+### Latihan 2: API CRUD bank_account + unit test
+
 Tambahkan API **create, update, delete** untuk resource `bank_account`, lengkap dengan unit test-nya. Kerjakan mengikuti pola clean architecture yang sudah ada (controller → service → repository).
 
-### Spesifikasi endpoint
+#### Spesifikasi endpoint
 
 | Method | Path                          | Auth | Body                                              | Response                             |
 |--------|-------------------------------|------|---------------------------------------------------|--------------------------------------|
@@ -113,7 +144,7 @@ Tambahkan API **create, update, delete** untuk resource `bank_account`, lengkap 
 | PUT    | `/api/v1/bank-accounts/{id}`  | Yes  | `account_name`, `bank_name`, `balance`             | `200` → `BankAccountResponse`        |
 | DELETE | `/api/v1/bank-accounts/{id}`  | Yes  | -                                                 | `204` (tanpa body)                   |
 
-### Aturan bisnis
+#### Aturan bisnis
 
 - Semua endpoint wajib pakai `get_current_user` (JWT).
 - Hanya **pemilik** akun yang boleh update/delete — akun user lain dianggap tidak ada (404).
@@ -122,7 +153,7 @@ Tambahkan API **create, update, delete** untuk resource `bank_account`, lengkap 
 - `account_number` tidak boleh diubah lewat PUT (hanya `account_name`, `bank_name`, `balance`).
 - Kalau id tidak ditemukan / bukan milik user → `404 Not Found`.
 
-### Petunjuk pengerjaan
+#### Petunjuk pengerjaan
 
 1. **Schemas** (`app/schemas/bank_account.py`): tambah `BankAccountCreate` dan `BankAccountUpdate` (pakai `Field(ge=0)` untuk balance).
 2. **Repository** (`app/repos/bank_account_repo.py`): tambah method `get_by_account_number`, `create_account`, `update_account`, `delete_account`.
@@ -130,9 +161,9 @@ Tambahkan API **create, update, delete** untuk resource `bank_account`, lengkap 
 4. **Controller** (`app/controllers/bank_account_controller.py`): tambah 3 endpoint di atas.
 5. Cek dengan curl / docs http://localhost:8000/docs.
 
-### Unit test yang harus dibuat
+#### Unit test yang harus dibuat
 
-Buat 2 file test baru (pola sama seperti file test yang sudah ada, pakai fixture `db_session` + `client` dari `tests/conftest.py`):
+Buat 2 file test baru, pakai fixture `db_session` + `client` dari `tests/conftest.py`:
 
 **`tests/unit/test_bank_account_service_crud.py`** — service layer:
 - `create` sukses → data tersimpan, `account_number` benar
@@ -153,7 +184,7 @@ Buat 2 file test baru (pola sama seperti file test yang sudah ada, pakai fixture
 - `DELETE` → `204`
 - `DELETE` akun user lain → `404`
 
-### Kriteria penerimaan
+#### Kriteria penerimaan
 
 - [ ] `make test` → semua test pass (termasuk 16 test CRUD baru di atas).
 - [ ] Kode mengikuti alur clean architecture (controller tidak menulis query, service tidak menulis SQL).
