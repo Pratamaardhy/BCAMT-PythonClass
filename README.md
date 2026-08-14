@@ -101,7 +101,7 @@ Cakupan test: belum ada test file — semua test dibuat lewat **Soal Latihan** d
 
 ## Soal Latihan
 
-Ada 2 latihan: **unit test auth** dan **API CRUD bank_account + test-nya**. Kerjakan berurutan.
+Ada 3 latihan: **unit test auth**, **API CRUD bank_account + test-nya**, dan **entity `user_accounts` + CRUD + test-nya**. Kerjakan berurutan.
 
 ### Latihan 1: Unit test untuk Auth (register + login + JWT)
 
@@ -191,6 +191,94 @@ Buat 2 file test baru, pakai fixture `db_session` + `client` dari `tests/conftes
 - [ ] Ownership check ada di **service**, bukan controller.
 - [ ] Tidak ada test yang butuh PostgreSQL berjalan.
 
+### Latihan 3: Entity `user_accounts` (user mendaftarkan bank account) + CRUD + unit test
+
+> Prasyarat: selesaikan **Latihan 2** dulu, karena `user_accounts` mereferensikan `bank_accounts`. Untuk keperluan test, data `BankAccount` bisa dibuat langsung via `db_session` tanpa harus lewat API.
+
+Buat entity baru **`user_accounts`** — tempat user **mendaftarkan bank account** ke profile mereka. Setiap baris = satu registrasi: user + bank_account + info tambahan (label, primary, status).
+
+#### Spesifikasi entity (tabel `user_accounts`)
+
+| Kolom            | Tipe                         | Keterangan                                         |
+|------------------|------------------------------|----------------------------------------------------|
+| `id`             | int PK autoincrement         |                                                    |
+| `user_id`        | FK `users.id` (CASCADE)      | index                                              |
+| `bank_account_id`| FK `bank_accounts.id` (CASCADE) | index                                           |
+| `label`          | varchar(255) nullable        | nama panggilan, mis. "Gaji"                        |
+| `is_primary`     | boolean default `False`      | maksimal 1 `True` per user                         |
+| `status`         | varchar(20) default `active` | hanya `active` / `inactive`                        |
+| `created_at` / `updated_at` | pakai `TimestampMixin` |                                     |
+
+Tambahkan **`UniqueConstraint(user_id, bank_account_id)`** — user tidak boleh daftarkan bank account yang sama dua kali.
+
+#### Spesifikasi endpoint
+
+| Method | Path                            | Auth | Body                                       | Response                              |
+|--------|---------------------------------|------|--------------------------------------------|---------------------------------------|
+| POST   | `/api/v1/user-accounts`         | Yes  | `bank_account_id`, `label?`, `is_primary?` | `201` → `UserAccountResponse`         |
+| GET    | `/api/v1/user-accounts`         | Yes  | -                                          | `200` → `list[UserAccountResponse]`   |
+| GET    | `/api/v1/user-accounts/{id}`    | Yes  | -                                          | `200` → `UserAccountResponse`         |
+| PUT    | `/api/v1/user-accounts/{id}`    | Yes  | `label?`, `is_primary?`, `status?`         | `200` → `UserAccountResponse`         |
+| DELETE | `/api/v1/user-accounts/{id}`    | Yes  | -                                          | `204` (tanpa body)                    |
+
+#### Aturan bisnis
+
+- Semua endpoint wajib pakai `get_current_user` (JWT).
+- Hanya **pemilik** yang boleh lihat/update/delete — registrasi user lain dianggap tidak ada (404).
+- `bank_account_id` harus ada **dan milik user** — kalau tidak ada / milik user lain → `404`.
+- Daftarkan bank account yang sama dua kali → `409 Conflict` (cek di service + `UniqueConstraint` di DB).
+- `status` hanya `active` / `inactive` → selain itu `422` (pakai `Literal` di Pydantic).
+- `is_primary` di-set `true` → otomatis set `is_primary=false` untuk registrasi lain milik user yang sama (hanya 1 primary per user).
+- Kalau id tidak ditemukan / bukan milik user → `404 Not Found`.
+
+#### Petunjuk pengerjaan
+
+1. **Model** (`app/models/user_account.py`): class `UserAccount`, relasi `User.user_accounts` dan `BankAccount.user_accounts` (back_populates), `UniqueConstraint`. Daftarkan di `app/models/__init__.py`.
+2. **Migration**: `make db-up` lalu `make migrate-auto` dan `make migrate` (butuh PostgreSQL jalan).
+3. **Schemas** (`app/schemas/user_account.py`): `UserAccountCreate`, `UserAccountUpdate` (semua field optional, `status: Literal["active", "inactive"]`), `UserAccountResponse` (`from_attributes=True`).
+4. **Repository** (`app/repos/user_account_repo.py`): `UserAccountRepository` — `list_by_user`, `get_by_id_for_user`, `get_by_user_and_bank_account` (cek duplikat), `create_account`, `update_account`, `delete_account`.
+5. **Service** (`app/services/user_account_service.py`): `UserAccountService` — business logic di sini (cek eksistensi/ownership bank account → 404, cek duplikat → 409, logika `is_primary`).
+6. **Controller** (`app/controllers/user_account_controller.py`): router prefix `/user-accounts`, daftarkan di `app/main.py`.
+7. Cek dengan curl / docs http://localhost:8000/docs.
+
+#### Unit test yang harus dibuat
+
+Buat 2 file test baru, pakai fixture `db_session` + `client` dari `tests/conftest.py`:
+
+**`tests/unit/test_user_account_service.py`** — service layer:
+- `create` sukses → tersimpan, relasi `user_id` + `bank_account_id` benar
+- `create` dengan `bank_account_id` milik user lain → `NotFoundError`
+- `create` dengan `bank_account_id` tidak ada → `NotFoundError`
+- `create` bank account yang sudah didaftarkan user yang sama → `ConflictError`
+- `create` dengan `is_primary=true` → registrasi lain milik user itu jadi `is_primary=false`
+- `list` → hanya milik user, tidak bocor punya user lain
+- `get` by id sukses
+- `get` by id milik user lain → `NotFoundError`
+- `update` `label` / `status` / `is_primary` sukses → field berubah
+- `update` milik user lain → `NotFoundError`
+- `delete` sukses → hilang dari list
+- `delete` milik user lain → `NotFoundError`
+
+**`tests/unit/test_user_account_endpoints.py`** — endpoint layer via `client` (TestClient):
+- `POST` create → `201`, response berisi `bank_account_id` + `status: "active"`
+- `POST` tanpa token → `401`
+- `POST` dengan `bank_account_id` milik user lain → `404`
+- `POST` duplikat → `409`
+- `GET` list → `200`, hanya registrasi milik user
+- `GET` by id → `200`
+- `GET` by id milik user lain → `404`
+- `PUT` update `label` → `200`, label berubah
+- `PUT` dengan `status` invalid → `422`
+- `DELETE` → `204`
+- `DELETE` milik user lain → `404`
+
+#### Kriteria penerimaan
+
+- [ ] `make test` → semua test pass (termasuk 23 test `user_accounts` di atas).
+- [ ] `UniqueConstraint(user_id, bank_account_id)` ada di model + migration.
+- [ ] Logika "hanya 1 `is_primary` per user" ada di service, bukan controller.
+- [ ] Kode mengikuti alur clean architecture (controller tidak menulis query, service tidak menulis SQL).
+- [ ] Tidak ada test yang butuh PostgreSQL berjalan.
 
 
 ## Config Environment (`.env`)
