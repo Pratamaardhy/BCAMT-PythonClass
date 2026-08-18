@@ -306,3 +306,5 @@ Buat 2 file test baru, pakai fixture `db_session` + `client` dari `tests/conftes
 - Token JWT HS256, expired otomatis per `ACCESS_TOKEN_EXPIRE_MINUTES`.
 - Bank account ter-isolasi per user — user tidak bisa akses account milik user lain (404).
 - **Jangan pernah** commit `.env` (sudah di `.gitignore`). Ganti `SECRET_KEY` sebelum production.
+#   m i n i - p r o j e c t - p y t h o n  
+ 
