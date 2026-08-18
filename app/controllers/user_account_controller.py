@@ -1,92 +1,58 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Query, Response
-
-from app.deps import CurrentUser, DbDep
-from app.repos.bank_account_repo import BankAccountRepository
-from app.repos.user_account_repo import UserAccountRepository
-from app.schemas.user_account import (
-    UserAccountCreate,
-    UserAccountResponse,
-    UserAccountUpdate,
-)
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
+from app.deps import get_db, get_current_user
+from app.models.user import User
+from app.schemas.user_account import UserAccountCreate, UserAccountUpdate, UserAccountResponse
 from app.services.user_account_service import UserAccountService
+from app.repos.user_account_repo import UserAccountRepository
 
-router = APIRouter(prefix="/user-accounts", tags=["user-accounts"])
+router = APIRouter(prefix="/api/v1/user-accounts", tags=["User Accounts"])
 
-
-def _service(db: DbDep) -> UserAccountService:
-    return UserAccountService(UserAccountRepository(db), BankAccountRepository(db))
-
-
-@router.get(
-    "",
-    response_model=list[UserAccountResponse],
-    summary="Get all registered bank accounts of current user",
-)
-def list_user_accounts(
-    db: DbDep,
-    current_user: CurrentUser,
-    skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 100,
-):
-    return _service(db).list_accounts(current_user.id, skip=skip, limit=limit)
-
-
-@router.get(
-    "/{user_account_id}",
-    response_model=UserAccountResponse,
-    summary="Get a registered bank account by id",
-)
-def get_user_account(user_account_id: int, db: DbDep, current_user: CurrentUser):
-    return _service(db).get_account(user_account_id, current_user.id)
-
-
-@router.post(
-    "",
-    response_model=UserAccountResponse,
-    status_code=201,
-    summary="Register a bank account to current user",
-)
+@router.post("", response_model=UserAccountResponse, status_code=status.HTTP_201_CREATED)
 def create_user_account(
-    payload: UserAccountCreate, db: DbDep, current_user: CurrentUser
+    obj_in: UserAccountCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    return _service(db).create_account(
-        current_user.id,
-        bank_account_id=payload.bank_account_id,
-        label=payload.label,
-        is_primary=payload.is_primary,
-    )
+    service = UserAccountService(db)
+    return service.create(current_user.id, obj_in)
 
+@router.get("", response_model=list[UserAccountResponse])
+def get_user_accounts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    repo = UserAccountRepository(db)
+    return repo.list_by_user(current_user.id)
 
-@router.put(
-    "/{user_account_id}",
-    response_model=UserAccountResponse,
-    status_code=200,
-    summary="Update a registered bank account",
-)
+@router.get("/{id}", response_model=UserAccountResponse)
+def get_user_account_by_id(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    repo = UserAccountRepository(db)
+    user_acc = repo.get_by_id_for_user(id, current_user.id)
+    if not user_acc:
+        raise NotFoundError("User account not found")
+    return user_acc
+
+@router.put("/{id}", response_model=UserAccountResponse)
 def update_user_account(
-    user_account_id: int,
-    payload: UserAccountUpdate,
-    db: DbDep,
-    current_user: CurrentUser,
+    id: int,
+    obj_in: UserAccountUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    return _service(db).update_account(
-        user_account_id,
-        current_user.id,
-        label=payload.label,
-        is_primary=payload.is_primary,
-        status=payload.status,
-    )
+    service = UserAccountService(db)
+    return service.update(current_user.id, id, obj_in)
 
-
-@router.delete(
-    "/{user_account_id}",
-    status_code=204,
-    summary="Delete a registered bank account",
-)
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_account(
-    user_account_id: int, db: DbDep, current_user: CurrentUser
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    _service(db).delete_account(user_account_id, current_user.id)
-    return Response(status_code=204)
+    service = UserAccountService(db)
+    service.delete(current_user.id, id)
+    return None

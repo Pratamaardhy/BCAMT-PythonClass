@@ -1,80 +1,41 @@
-from decimal import Decimal
-
-from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from app.models.bank_account import BankAccount
-from app.repos.base import BaseRepository
+from app.schemas.bank_account import BankAccountCreate, BankAccountUpdate
 
-
-class BankAccountRepository(BaseRepository[BankAccount]):
-    model = BankAccount
-
-    def __init__(self, db: Session) -> None:
+class BankAccountRepository:
+    def __init__(self, db: Session):
         self.db = db
 
-    def list_by_user(
-        self, user_id: int, *, skip: int = 0, limit: int = 100
-    ) -> list[BankAccount]:
-        stmt = (
-            select(BankAccount)
-            .where(BankAccount.user_id == user_id)
-            .order_by(BankAccount.id)
-            .offset(skip)
-            .limit(limit)
-        )
-        return list(self.db.scalars(stmt).all())
+    def get_by_id(self, account_id: int) -> Optional[BankAccount]:
+        return self.db.query(BankAccount).filter(BankAccount.id == account_id).first()
 
-    def get_by_id_for_user(
-        self, account_id: int, user_id: int
-    ) -> BankAccount | None:
-        stmt = select(BankAccount).where(
-            BankAccount.id == account_id, BankAccount.user_id == user_id
-        )
-        return self.db.scalar(stmt)
-    
-    def get_by_account_number(self, account_number: str) -> BankAccount | None:
-        stmt = select(BankAccount).where(
-            BankAccount.account_number == account_number
-        )
-        return self.db.scalar(stmt)
+    def get_by_account_number(self, account_number: str) -> Optional[BankAccount]:
+        return self.db.query(BankAccount).filter(BankAccount.account_number == account_number).first()
 
-    def create_account(
-        self,
-        *,
-        user_id: int,
-        account_number: str,
-        account_name: str,
-        bank_name: str,
-        balance: Decimal,
-    ) -> BankAccount:
-        account = BankAccount(
+    def get_all_by_user(self, user_id: int) -> list[BankAccount]:
+        return self.db.query(BankAccount).filter(BankAccount.user_id == user_id).all()
+
+    def create(self, user_id: int, obj_in: BankAccountCreate) -> BankAccount:
+        db_obj = BankAccount(
             user_id=user_id,
-            account_number=account_number,
-            account_name=account_name,
-            bank_name=bank_name,
-            balance=balance,
+            account_number=obj_in.account_number,
+            account_name=obj_in.account_name,
+            bank_name=obj_in.bank_name,
+            balance=obj_in.balance
         )
-        self.db.add(account)
+        self.db.add(db_obj)
         self.db.commit()
-        self.db.refresh(account)
-        return account
+        self.db.refresh(db_obj)
+        return db_obj
 
-    def update_account(
-        self,
-        account: BankAccount,
-        *,
-        account_name: str,
-        bank_name: str,
-        balance: Decimal,
-    ) -> BankAccount:
-        account.account_name = account_name
-        account.bank_name = bank_name
-        account.balance = balance
+    def update(self, db_obj: BankAccount, obj_in: BankAccountUpdate) -> BankAccount:
+        update_data = obj_in.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(db_obj, field, value)
         self.db.commit()
-        self.db.refresh(account)
-        return account
+        self.db.refresh(db_obj)
+        return db_obj
 
-    def delete_account(self, account: BankAccount) -> None:
-        self.db.delete(account)
+    def delete(self, db_obj: BankAccount) -> None:
+        self.db.delete(db_obj)
         self.db.commit()

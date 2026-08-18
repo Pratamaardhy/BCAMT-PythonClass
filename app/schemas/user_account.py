@@ -5,25 +5,22 @@ from pydantic import BaseModel, ConfigDict
 
 
 class UserAccountResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    bank_account_id: int
+    label: Optional[str] = None
+    is_primary: Optional[bool] = False
 
+class UserAccountUpdate(BaseModel):
+    label: Optional[str] = None
+    is_primary: Optional[bool] = None
+    status: Optional[Literal["active", "inactive"]] = None
+
+class UserAccountResponse(BaseModel):
     id: int
     user_id: int
     bank_account_id: int
-    label: str | None
+    label: Optional[str]
     is_primary: bool
     status: str
-    created_at: datetime
-    updated_at: datetime
 
-
-class UserAccountCreate(BaseModel):
-    bank_account_id: int
-    label: str | None = None
-    is_primary: bool = False
-
-
-class UserAccountUpdate(BaseModel):
-    label: str | None = None
-    is_primary: bool | None = None
-    status: Literal["active", "inactive"] | None = None
+    class Config:
+        from_attributes = True

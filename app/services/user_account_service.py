@@ -1,73 +1,40 @@
-from app.core.exceptions import ConflictError, NotFoundError
-from app.models.user_account import UserAccount
-from app.repos.bank_account_repo import BankAccountRepository
+from sqlalchemy.orm import Session
 from app.repos.user_account_repo import UserAccountRepository
-
+from app.repos.bank_account_repo import BankAccountRepository
+from app.schemas.user_account import UserAccountCreate, UserAccountUpdate
+from app.core.exceptions import ConflictError, NotFoundError
 
 class UserAccountService:
-    def __init__(
-        self,
-        repo: UserAccountRepository,
-        bank_account_repo: BankAccountRepository,
-    ) -> None:
-        self.repo = repo
-        self.bank_account_repo = bank_account_repo
+    def __init__(self, db: Session):
+        self.repo = UserAccountRepository(db)
+        self.bank_repo = BankAccountRepository(db)
 
-    def list_accounts(
-        self, user_id: int, *, skip: int = 0, limit: int = 100
-    ) -> list[UserAccount]:
-        return self.repo.list_by_user(user_id, skip=skip, limit=limit)
+    def create(self, user_id: int, obj_in: UserAccountCreate):
+        bank_acc = self.bank_repo.get_by_id(obj_in.bank_account_id)
+        if not bank_acc or bank_acc.user_id != user_id:
+            raise NotFoundError("Bank account not found or does not belong to user")
 
-    def get_account(self, user_account_id: int, user_id: int) -> UserAccount:
-        account = self.repo.get_by_id_for_user(user_account_id, user_id)
-        if not account:
-            raise NotFoundError("User account not found")
-        return account
+        existing = self.repo.get_by_user_and_bank(user_id, obj_in.bank_account_id)
+        if existing:
+            raise ConflictError("User account registration already exists")
 
-    def create_account(
-        self,
-        user_id: int,
-        *,
-        bank_account_id: int,
-        label: str | None,
-        is_primary: bool,
-    ) -> UserAccount:
-        bank_account = self.bank_account_repo.get_by_id_for_user(
-            bank_account_id, user_id
-        )
-        if not bank_account:
-            raise NotFoundError("Bank account not found")
+        if obj_in.is_primary:
+            self.repo.unset_primary_for_user(user_id)
 
-        if self.repo.get_by_user_and_bank_account(user_id, bank_account_id):
-            raise ConflictError("Bank account already registered")
+        return self.repo.create(user_id, obj_in)
 
-        account = self.repo.create_account(
-            user_id=user_id,
-            bank_account_id=bank_account_id,
-            label=label,
-            is_primary=is_primary,
-        )
-        if is_primary:
-            self.repo.unset_other_primaries(user_id, exclude_id=account.id)
-        return account
+    def update(self, user_id: int, account_id: int, obj_in: UserAccountUpdate):
+        user_acc = self.repo.get_by_id_for_user(account_id, user_id)
+        if not user_acc:
+            raise NotFoundError("User account registration not found")
 
-    def update_account(
-        self,
-        user_account_id: int,
-        user_id: int,
-        *,
-        label: str | None,
-        is_primary: bool | None,
-        status: str | None,
-    ) -> UserAccount:
-        account = self.get_account(user_account_id, user_id)
-        account = self.repo.update_account(
-            account, label=label, is_primary=is_primary, status=status
-        )
-        if is_primary:
-            self.repo.unset_other_primaries(user_id, exclude_id=account.id)
-        return account
+        if obj_in.is_primary:
+            self.repo.unset_primary_for_user(user_id)
 
-    def delete_account(self, user_account_id: int, user_id: int) -> None:
-        account = self.get_account(user_account_id, user_id)
-        self.repo.delete_account(account)
+        return self.repo.update(user_acc, obj_in)
+
+    def delete(self, user_id: int, account_id: int):
+        user_acc = self.repo.get_by_id_for_user(account_id, user_id)
+        if not user_acc:
+            raise NotFoundError("User account registration not found")
+        self.repo.delete(user_acc)
