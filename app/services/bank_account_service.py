@@ -1,4 +1,6 @@
-from app.core.exceptions import NotFoundError
+from decimal import Decimal
+
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.bank_account import BankAccount
 from app.repos.bank_account_repo import BankAccountRepository
 
@@ -17,3 +19,43 @@ class BankAccountService:
         if not account:
             raise NotFoundError("Bank account not found")
         return account
+    
+    def create_account(
+        self,
+        user_id: int,
+        *,
+        account_number: str,
+        account_name: str,
+        bank_name: str,
+        balance: Decimal,
+    ) -> BankAccount:
+        if self.repo.get_by_account_number(account_number):
+            raise ConflictError("Account number already registered")
+        return self.repo.create_account(
+            user_id=user_id,
+            account_number=account_number,
+            account_name=account_name,
+            bank_name=bank_name,
+            balance=balance,
+        )
+
+    def update_account(
+        self,
+        account_id: int,
+        user_id: int,
+        *,
+        account_name: str,
+        bank_name: str,
+        balance: Decimal,
+    ) -> BankAccount:
+        account = self.get_account(account_id, user_id)
+        return self.repo.update_account(
+            account,
+            account_name=account_name,
+            bank_name=bank_name,
+            balance=balance,
+        )
+
+    def delete_account(self, account_id: int, user_id: int) -> None:
+        account = self.get_account(account_id, user_id)
+        self.repo.delete_account(account)

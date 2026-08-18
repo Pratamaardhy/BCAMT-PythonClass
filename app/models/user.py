@@ -1,7 +1,13 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.bank_account import BankAccount
+    from app.models.user_account import UserAccount
 
 
 class User(Base, TimestampMixin):
@@ -18,5 +24,8 @@ class User(Base, TimestampMixin):
     )
 
     bank_accounts: Mapped[list["BankAccount"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    user_accounts: Mapped[list["UserAccount"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

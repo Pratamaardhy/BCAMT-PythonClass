@@ -1,9 +1,14 @@
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.user_account import UserAccount
 
 
 class BankAccount(Base, TimestampMixin):
@@ -23,3 +28,6 @@ class BankAccount(Base, TimestampMixin):
     )
 
     user: Mapped["User"] = relationship(back_populates="bank_accounts")
+    user_accounts: Mapped[list["UserAccount"]] = relationship(
+        back_populates="bank_account", cascade="all, delete-orphan"
+    )

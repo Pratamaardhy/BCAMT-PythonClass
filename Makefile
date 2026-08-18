@@ -5,7 +5,7 @@ setup:
 	.venv/bin/pip install -r requirements.txt
 
 run:
-	.venv/bin/uvicorn app.main:app --reload
+	.venv/bin/uvicorn app.main:app --reload -> jalanin server uvicorn di localhost:8000
 
 db-up:
 	docker compose up -d db
@@ -13,11 +13,12 @@ db-up:
 migrate-auto:
 	.venv/bin/alembic revision --autogenerate -m "init"
 
+
 migrate:
 	.venv/bin/alembic upgrade head
 
 test:
-	.venv/bin/python -m pytest -v
+	.venv/scripts/python -m pytest -v
 
 clean:
 	rm -rf .venv .pytest_cache __pycache__

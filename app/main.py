@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.controllers import auth_controller, bank_account_controller
+from app.controllers import auth_controller, bank_account_controller, user_account_controller
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 
@@ -29,6 +29,9 @@ async def app_error_handler(request, exc: AppError):
 app.include_router(auth_controller.router, prefix=settings.API_V1_PREFIX)
 app.include_router(
     bank_account_controller.router, prefix=settings.API_V1_PREFIX
+)
+app.include_router(
+    user_account_controller.router, prefix=settings.API_V1_PREFIX
 )
 
 

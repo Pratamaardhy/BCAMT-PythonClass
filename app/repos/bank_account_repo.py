@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,3 +32,49 @@ class BankAccountRepository(BaseRepository[BankAccount]):
             BankAccount.id == account_id, BankAccount.user_id == user_id
         )
         return self.db.scalar(stmt)
+    
+    def get_by_account_number(self, account_number: str) -> BankAccount | None:
+        stmt = select(BankAccount).where(
+            BankAccount.account_number == account_number
+        )
+        return self.db.scalar(stmt)
+
+    def create_account(
+        self,
+        *,
+        user_id: int,
+        account_number: str,
+        account_name: str,
+        bank_name: str,
+        balance: Decimal,
+    ) -> BankAccount:
+        account = BankAccount(
+            user_id=user_id,
+            account_number=account_number,
+            account_name=account_name,
+            bank_name=bank_name,
+            balance=balance,
+        )
+        self.db.add(account)
+        self.db.commit()
+        self.db.refresh(account)
+        return account
+
+    def update_account(
+        self,
+        account: BankAccount,
+        *,
+        account_name: str,
+        bank_name: str,
+        balance: Decimal,
+    ) -> BankAccount:
+        account.account_name = account_name
+        account.bank_name = bank_name
+        account.balance = balance
+        self.db.commit()
+        self.db.refresh(account)
+        return account
+
+    def delete_account(self, account: BankAccount) -> None:
+        self.db.delete(account)
+        self.db.commit()
